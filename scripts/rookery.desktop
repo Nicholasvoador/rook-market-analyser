@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Rook Market Analyser
+GenericName=Market Intelligence
+Comment=Crypto, stocks and macro analysis powered by your own AI models
+Exec=@ROOT@/scripts/rookery-open
+Icon=@ROOT@/frontend/public/favicon.svg
+Terminal=false
+Categories=Finance;Office;
+StartupWMClass=Rookery
+Keywords=crypto;stocks;market;trading;bitcoin;solana;

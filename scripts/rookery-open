@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Open Rook Market Analyser as a standalone app window (Chromium-family --app mode), else the default browser.
+URL="${ROOKERY_URL:-http://127.0.0.1:8787}"
+if ! curl -sf -o /dev/null --max-time 2 "$URL/api/status"; then
+  systemctl --user start rookery.service 2>/dev/null
+  for _ in $(seq 1 20); do curl -sf -o /dev/null --max-time 1 "$URL/api/status" && break; sleep 0.5; done
+fi
+for b in brave-origin-beta brave-origin brave-browser brave chromium chromium-browser google-chrome google-chrome-stable microsoft-edge; do
+  if command -v "$b" >/dev/null 2>&1; then exec "$b" --app="$URL" --class=Rookery "$@"; fi
+done
+if flatpak info com.brave.Browser >/dev/null 2>&1; then exec flatpak run com.brave.Browser --app="$URL" --class=Rookery; fi
+exec xdg-open "$URL"

@@ -1,0 +1,18 @@
+[Unit]
+Description=Rook Market Analyser - local market intelligence (crypto, stocks, macro)
+Documentation=file://@ROOT@/README.md
+After=network-online.target hermes-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@/backend
+ExecStart=@ROOT@/backend/.venv/bin/uvicorn rookery.main:app --host 127.0.0.1 --port 8787 --log-level warning --ws-ping-interval 20
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Nice=5
+MemoryMax=2G
+
+[Install]
+WantedBy=default.target
