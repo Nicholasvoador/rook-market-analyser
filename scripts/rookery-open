@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
 # Open Rook Market Analyser as a standalone app window (Chromium-family --app mode), else the default browser.
+#
+# The app window always gets its OWN browser profile (--user-data-dir). Without one, Chromium-family
+# browsers attach to (or become) the user's main browser process: the main session isn't restored and
+# --class re-labels every normal browser window as "Rookery".
 URL="${ROOKERY_URL:-http://127.0.0.1:8787}"
+PROFILE="${ROOKERY_BROWSER_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/rookery/browser}"
+FLAGS=(--app="$URL" --class=Rookery --no-first-run --no-default-browser-check)
+
 if ! curl -sf -o /dev/null --max-time 2 "$URL/api/status"; then
   systemctl --user start rookery.service 2>/dev/null
   for _ in $(seq 1 20); do curl -sf -o /dev/null --max-time 1 "$URL/api/status" && break; sleep 0.5; done
 fi
 for b in brave-origin-beta brave-origin brave-browser brave chromium chromium-browser google-chrome google-chrome-stable microsoft-edge; do
-  if command -v "$b" >/dev/null 2>&1; then exec "$b" --app="$URL" --class=Rookery "$@"; fi
+  if command -v "$b" >/dev/null 2>&1; then
+    mkdir -p "$PROFILE"
+    exec "$b" --user-data-dir="$PROFILE" "${FLAGS[@]}" "$@"
+  fi
 done
-if flatpak info com.brave.Browser >/dev/null 2>&1; then exec flatpak run com.brave.Browser --app="$URL" --class=Rookery; fi
+if flatpak info com.brave.Browser >/dev/null 2>&1; then
+  # Inside the sandbox only the app's own data dir is guaranteed writable.
+  FP_PROFILE="$HOME/.var/app/com.brave.Browser/data/rookery-app"
+  mkdir -p "$FP_PROFILE"
+  exec flatpak run com.brave.Browser --user-data-dir="$FP_PROFILE" "${FLAGS[@]}" "$@"
+fi
 exec xdg-open "$URL"
