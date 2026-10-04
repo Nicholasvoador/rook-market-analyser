@@ -135,7 +135,7 @@ cd frontend && npx vitest run
 
 The backend suite covers no-look-ahead setups, honest verdicts, cone calibration convergence, latency hysteresis,
 fallback chains, Elfa budget pacing and persistence, wallet spam handling, the secrets/wallet privacy guarantees, AI
-fallback with mid-answer continuation, and the HTTP API.
+fallback with mid-answer continuation, and the HTTP API. CI runs both suites, a typecheck, lint and a production build.
 
 A headless browser check (`scripts/e2e/e2e.py`) visits every page at 100%, 115% and 160% scale and fails on console
 errors, overflow, clipped controls, unlabelled inputs and missing headings.
