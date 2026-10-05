@@ -7,6 +7,14 @@ type Item = { id: string; label: string; hint?: string; act: () => void }
 
 const PAGES: [string, string][] = [
   ['dashboard', 'Dashboard'],
+  ['markets/overview', 'Markets · Overview'],
+  ['markets/crypto', 'Markets · Crypto'],
+  ['markets/stocks', 'Markets · Stocks'],
+  ['markets/commodities', 'Markets · Commodities'],
+  ['markets/indices', 'Markets · Indices'],
+  ['markets/fx', 'Markets · FX'],
+  ['markets/rates', 'Markets · Rates'],
+  ['markets/etfs', 'Markets · ETFs'],
   ['ask', 'Ask Rook'],
   ['signals', 'Signals scanner'],
   ['predictions', 'Predictions & track record'],
@@ -21,6 +29,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
   const inp = useRef<HTMLInputElement>(null)
   const { settings } = useSettings()
   const { data: markets } = useApi<any>(open ? '/api/crypto/markets?n=150' : null)
+  const { data: universe } = useApi<any[]>(open ? '/api/markets/universe' : null)
 
   useEffect(() => {
     if (open) {
@@ -42,7 +51,9 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     const rows = markets?.rows || []
     const cr = rows.filter((r: any) => s && (r.sym.startsWith(S) || r.name.toUpperCase().includes(S))).slice(0, 8)
     for (const r of cr) out.push({ id: `c:${r.sym}`, label: `${r.sym} · ${r.name}`, hint: 'crypto', act: close(() => (location.hash = assetHref(r.sym, 'crypto'))) })
-    const st: string[] = settings?.watchlist?.stocks || []
+    const uni = (universe || []).filter((u: any) => s && (u.sym.toUpperCase().startsWith(S) || u.label.toUpperCase().includes(S))).slice(0, 8)
+    for (const u of uni) out.push({ id: `u:${u.sym}`, label: `${u.label} · ${u.sym}`, hint: u.kind === 'equity' ? 'stock' : u.kind, act: close(() => (location.hash = assetHref(u.sym, 'stock'))) })
+    const st: string[] = (settings?.watchlist?.stocks || []).filter((x: string) => !uni.some((u: any) => u.sym === x))
     for (const x of st.filter((x) => s && x.includes(S)).slice(0, 5))
       out.push({ id: `s:${x}`, label: x, hint: 'stock', act: close(() => (location.hash = assetHref(x, 'stock'))) })
     if (s && /^[A-Z0-9.^=-]{1,12}$/.test(S)) {
@@ -51,7 +62,7 @@ export default function CommandPalette({ open, onClose }: { open: boolean; onClo
     }
     if (s) out.push({ id: 'ask', label: `Ask Rook: “${s}”`, hint: '↵ AI', act: close(() => go(`ask?q=${encodeURIComponent(s)}`)) })
     return out.slice(0, 16)
-  }, [q, markets, settings, onClose])
+  }, [q, markets, universe, settings, onClose])
 
   if (!open) return null
   return (

@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import ai, alerts, db, net, portfolio, predict, setups, signals, wallets
 from .config import APP_NAME, FRONTEND_DIST, load_settings, save_settings, secret, secrets_status, set_secrets
-from .sources import crypto, elfa, sentiment, solana, stocks
+from .sources import crypto, elfa, markets, sentiment, solana, stocks
 
 log = logging.getLogger("rookery")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -175,6 +175,19 @@ async def loop_probe():
         await asyncio.sleep(60)
 
 
+async def loop_markets():
+    """Keeps the cross-asset overview and BCB rates warm so the Markets page opens instantly."""
+    await asyncio.sleep(20)
+    while True:
+        try:
+            await markets.cross()
+            await markets.brazil()
+            _task_ok("markets")
+        except Exception as e:  # noqa: BLE001
+            _task_err("markets", e)
+        await asyncio.sleep(600)
+
+
 async def loop_elfa():
     await asyncio.sleep(15)
     while True:
@@ -218,7 +231,7 @@ async def loop_liq_broadcast():
 async def lifespan(app):
     db.init()
     tasks = [asyncio.create_task(c()) for c in (loop_news, loop_market, loop_predict, loop_alerts, loop_brief,
-                                                loop_liq_broadcast, loop_probe, loop_elfa, loop_signals)]
+                                                loop_liq_broadcast, loop_probe, loop_elfa, loop_signals, loop_markets)]
     tasks.append(asyncio.create_task(crypto.LIQS.run()))
     STATE["bg"] = tasks
     yield
@@ -489,6 +502,48 @@ async def c_onchain():
 @app.get("/api/crypto/polymarket")
 async def c_poly():
     return await crypto.polymarket()
+
+
+# ------------------------------------------------------------------ markets (cross-asset boards)
+@app.get("/api/markets/board")
+async def markets_board(tab: str = "stocks"):
+    if tab not in markets.TABS:
+        raise HTTPException(400, f"tab must be one of {', '.join(markets.TABS)}")
+    try:
+        return await markets.board(tab)
+    except Exception as e:  # noqa: BLE001
+        _err(e)
+
+
+@app.get("/api/markets/overview")
+async def markets_overview():
+    cross, mov = await asyncio.gather(markets.cross(), markets.movers(), return_exceptions=True)
+    if isinstance(cross, BaseException):
+        _err(cross)
+    return {**cross, "movers": None if isinstance(mov, BaseException) else mov}
+
+
+@app.get("/api/markets/row")
+async def markets_row(sym: str, kind: str = "stock"):
+    if not sym or len(sym) > 24:
+        raise HTTPException(400, "invalid symbol")
+    r = await markets._safe(markets.row(sym if kind != "crypto" else sym.upper(), kind))
+    if not r:
+        raise HTTPException(404, "no data for symbol")
+    return r
+
+
+@app.get("/api/markets/universe")
+async def markets_universe():
+    return markets.universe()
+
+
+@app.get("/api/markets/brazil")
+async def markets_brazil():
+    try:
+        return markets.public_brazil(await markets.brazil())
+    except Exception as e:  # noqa: BLE001
+        _err(e)
 
 
 # ------------------------------------------------------------------ stocks / macro

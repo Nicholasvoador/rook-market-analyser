@@ -8,6 +8,7 @@ Needs the app running on 127.0.0.1:8787 (or ROOK_URL). Exit code 1 if any page f
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -17,9 +18,27 @@ from cdp import session, shot  # noqa: E402
 
 BASE = os.environ.get("ROOK_URL", "http://127.0.0.1:8787").rstrip("/") + "/"
 FAILED = []
+ALL_ERRS: list[str] = []  # every console error of the session (per-page lists are cleared)
+LIVE_STATE = """(() => {
+  const L = window.__rook && window.__rook.live
+  if (!L) return 'no __rook handle (page not loaded?) url=' + location.href
+  const s = (x) => x ? { closed: x.closed, ready: x.ws ? x.ws.readyState : null, urlIdx: x.urlIdx, backoff: x.backoff, n: x.urls.length } : null
+  return JSON.stringify({ bn: s(L.bn), bb: s(L.bb), ok: s(L.ok), nBn: L.bnStreams.size, venues: L.venue.size, pending: L.pending.size,
+    retries: Object.fromEntries(L.retries), prices: L.prices.size, lastMsgAgo: L.lastMsg ? Math.round((Date.now() - L.lastMsg) / 1000) : null,
+    uptime: Math.round(performance.now() / 1000) })
+})()"""
 BONK = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"
 PAGES = [
     ("dashboard", "#/", ["X mindshare", "Narratives on X", "Trending contracts", "Funding"]),
+    ("mkt-overview", "#/markets/overview", ["Cross-asset backdrop", "Relative performance", "What moves Bitcoin", "Real rate", "CDI"]),
+    ("mkt-crypto", "#/markets/crypto", ["Top by market cap", "52w range"]),
+    ("mkt-stocks", "#/markets/stocks", ["US mega caps", "Brazil (B3)", "Axia"]),
+    ("mkt-commod", "#/markets/commodities", ["Gold", "Agriculture"]),
+    ("mkt-indices", "#/markets/indices", ["S&P 500", "Ibovespa"]),
+    ("mkt-fx", "#/markets/fx", ["USD/BRL"]),
+    ("mkt-rates", "#/markets/rates", ["Real rate", "Treasury curve", "10-year"]),
+    ("mkt-etfs", "#/markets/etfs", ["US sectors"]),
+    ("asset-gold", "#/asset/stock/GC%3DF", ["Gold", "Performance", "Bottom line"]),
     ("signals", "#/signals", ["Scanner", "Setups firing now", "Live track record"]),
     ("asset-btc", "#/asset/crypto/BTC", ["Bottom line", "Levels", "Setups"]),
     ("asset-nvda", "#/asset/stock/NVDA", ["Bottom line"]),
@@ -71,6 +90,26 @@ A11Y = r"""(() => {
 })()"""
 
 
+TAPE = "[...document.querySelectorAll('.tape-item')].slice(0, 3).map(e => e.innerText.replace(/\\n/g, ' ')).join(' | ')"
+
+
+async def live_check(c, when, timeout=30):
+    """The live exchange feed must deliver prices to the ticker tape (direct browser -> exchange WebSockets)."""
+    tape = ""
+    for _ in range(timeout * 2):
+        tape = await c.eval(TAPE) or ""
+        if re.search(r"BTC [\d,]+\.\d+", tape):
+            print(f"OK  live feed at {when}: {tape}")
+            return
+        await asyncio.sleep(0.5)
+    FAILED.append(f"live:{when}")
+    print(f"!!  live feed at {when}: no prices after {timeout}s: {tape!r}")
+    print("      live state:", await c.eval(LIVE_STATE))
+    ALL_ERRS.extend(c.errors())
+    for e in dict.fromkeys(ALL_ERRS):
+        print("      console:", e[:240])
+
+
 async def wait_text(c, needles, timeout=25):
     for _ in range(timeout * 2):
         txt = await c.eval("document.body.innerText")
@@ -87,15 +126,19 @@ async def steps(c):
     os.makedirs(out, exist_ok=True)
     await c.call("Page.navigate", url=BASE)
     await asyncio.sleep(4)
+    await live_check(c, "start")
     for scale in (1.0, 1.15, 1.6):
         for name, route, needles in PAGES:
+            ALL_ERRS.extend(c.errors())
             c.events.clear()
             await c.eval(f"location.hash = '{route}'")
             await c.eval(f"document.documentElement.style.setProperty('--ui-scale', '{scale}')")
             missing = await wait_text(c, needles, 30 if scale == 1.0 else 12)
             await asyncio.sleep(2.5 if scale == 1.0 else 1.0)
             a = await c.eval(A11Y)
-            errs = [e for e in c.errors() if "favicon" not in e]
+            # "Ping received after close": Chrome logs this when an exchange's keep-alive ping lands after we deliberately
+            # closed a chart socket on navigation (close-handshake race). Benign and not preventable from the page.
+            errs = [e for e in c.errors() if "favicon" not in e and "Ping received after close" not in e]
             key = f"{name}@{int(scale * 100)}"
             report[key] = {"missing": missing, "errors": errs[:5], **a}
             flag = "OK " if (not missing and not errs and a["overflowX"] <= 0 and not a["unnamedN"] and not a["unlabeledN"]
@@ -111,8 +154,10 @@ async def steps(c):
                 print("     ", e[:220])
             for u in a["unnamed"][:3] + a["unlabeled"][:3]:
                 print("      a11y:", u)
-            if scale in (1.15, 1.6) and name in ("dashboard", "asset-btc", "settings", "portfolio", "signals", "asset-dex"):
+            if scale in (1.15, 1.6) and name in ("dashboard", "asset-btc", "signals", "mkt-overview", "mkt-commod", "mkt-rates", "asset-gold", "mkt-stocks"):
                 await shot(c, f"{out}/{key}.png")
+    await c.eval("location.hash = '#/'")
+    await live_check(c, "end (after visiting every page)")
     # keyboard: skip link is the first tab stop and moves focus to main
     await c.eval("location.hash = '#/'")
     await asyncio.sleep(1)
@@ -123,7 +168,9 @@ async def steps(c):
     # A+/A- buttons exist and are labelled
     print("scale buttons:", await c.eval("[...document.querySelectorAll('.scalebtns button')].map(b => b.getAttribute('aria-label'))"))
     json.dump(report, open(f"{out}/report.json", "w"), indent=1)
-    print(f"\n{len(PAGES) * 3 - len(FAILED)}/{len(PAGES) * 3} page checks passed · screenshots + report.json in {out}")
+    pages_failed = [f for f in FAILED if not f.startswith("live:")]
+    print(f"\n{len(PAGES) * 3 - len(pages_failed)}/{len(PAGES) * 3} page checks passed, live feed "
+          f"{'FAILED' if len(FAILED) > len(pages_failed) else 'ok'} · screenshots + report.json in {out}")
 
 
 asyncio.run(session(steps))

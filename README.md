@@ -15,14 +15,17 @@ your machine**; the only outbound calls are the market-data lookups needed to pr
 | | |
 |---|---|
 | **Live charts** | Your browser streams straight from the exchange WebSocket (Binance → Bybit → OKX), with no backend hop. It measures each venue's real feed latency and uses the fastest venue that lists the pair. EMA 9/21/50/200, RSI, MACD, Bollinger, volume, support/resistance levels, order book and trades. |
+| **Markets** | Tabs for **Overview · Crypto · Stocks · Commodities · Indices · FX · Rates · ETFs**: about 110 instruments plus your watchlist, with the same metrics everywhere (1D / 1W / 1M / YTD / 1Y, 52-week range, RSI, daily trend, volatility, 3-month sparkline, sortable). Returns can be shown in the asset's own currency, **in BRL**, or **vs CDI** (excess return over Brazil's risk-free benchmark). The overview gives a plain-language cross-asset backdrop, relative performance (USD, or BRL with CDI as the benchmark), a correlation heatmap, what has been moving Bitcoin (30 vs 90 days), the day's biggest movers, and Brazil rates (Selic, CDI, IPCA, real rate). |
 | **Plain-language readout** | Every asset opens with a **Bottom line** and short trend / momentum / levels / positioning / crowd / model lines, each tagged positive, negative or neutral. Jargon is underlined and explains itself on hover or keyboard focus. |
 | **Signal setups** | 13 causal (no look-ahead) setups: pullbacks in trend, breakouts and breakdowns on volume, squeezes, EMA crosses, RSI divergences, funding and OI extremes. Each comes with its **historical hit rate against the base rate** on that asset and timeframe, plus an honest verdict ("no clear edge" is the most common one). New setups on your watchlist are logged and graded into a live track record. |
 | **Forecasts that grade themselves** | P(up) for 4h / 24h / 7d, plus a 10–90% **forecast cone** drawn on the chart. Everything is scored against reality (Brier vs base rate, cone coverage vs the 80% target) and shrunk toward the base rate unless the model has *proven* skill. The cone width recalibrates itself from its own misses. |
 | **X / Telegram attention** | Elfa trending tokens, narratives, trending contracts and top mentions. A credit budget paces background jobs to your monthly allowance, keeps a reserve for on-demand lookups and persists results so restarts never re-spend credits. |
 | **Solana wallets** | Track any address read-only (SOL, SPL and Token-2022). Prices come from Jupiter with a DexScreener fallback. Spam protection: unverified, illiquid or unpriced tokens are flagged and excluded from totals, and an on-chain token is never mapped to an exchange ticker unless it's the verified mint. Wallets merge into the portfolio (risk, correlation, drawdown); any token can go on the watchlist with its own live chart. |
-| **AI analyst** | Ask anything. Each question gets a fresh live-data snapshot, and answers start with a bottom line and a confidence level. The fallback chain is primary model → fallback model (e.g. Gemini 3.8 at max reasoning) → Hermes CLI. If a model fails mid-answer, the next one continues from the cut. The AI's own probability calls are graded too. |
+| **AI analyst** | Ask anything, including "gold or the Nasdaq?" or "o dólar". Plain names map to the right instruments, and every answer gets cross-asset returns, BTC correlations and Brazil rates. Each question gets a fresh live-data snapshot, and answers start with a bottom line and a confidence level. The fallback chain is primary model → fallback model (e.g. Gemini 3.8 at max reasoning) → Hermes CLI. If a model fails mid-answer, the next one continues from the cut. The AI's own probability calls are graded too. |
 | **Markets & macro** | Stocks and ETFs (incl. B3 `.SA`), SEC fundamentals, US Treasury curve, DXY/VIX/indices, USD/BRL, CNN and crypto Fear & Greed, ETF flows, stablecoin liquidity, funding/OI/long-short, liquidations, on-chain stats, Polymarket, news tone and mindshare from RSS/Reddit. |
 | **Alerts** | Write them in plain words or build them from conditions (AND/OR, crosses, cooldowns), with an optional AI explanation when one fires and desktop notifications. |
+
+![Markets](docs/markets.png)
 
 ![Asset page](docs/asset.png)
 
@@ -114,6 +117,7 @@ Browser (React 19 + lightweight-charts 5, canvas)
        ├── sources/sentiment.py RSS + Reddit · VADER + crypto lexicon · ticker detection · mindshare/velocity
        ├── sources/elfa.py      credit-budgeted Elfa client · background jobs · persisted results
        ├── sources/solana.py    RPC chain · SPL + Token-2022 balances · Jupiter · DexScreener · GeckoTerminal
+       ├── sources/markets.py   cross-asset boards · Yahoo spark (20 symbols/request) · BCB CDI/Selic/IPCA · correlations
        ├── setups.py            13 causal setup detectors · base-rate stats · pivot levels
        ├── signals.py           Rook score · readout · setup event log + grading
        ├── predict.py           self-grading ensemble · forecast cone · coverage calibration
@@ -133,7 +137,7 @@ cd backend && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python 
 cd frontend && npx vitest run
 ```
 
-The backend suite covers no-look-ahead setups, honest verdicts, cone calibration convergence, latency hysteresis,
+The backend suite runs with networking disabled (CI-safe; verified under `unshare -rn`). It covers market metrics (calendar-window returns, basis points, BRL conversion, excess vs CDI), CDI accumulation, request batching, no-look-ahead setups, honest verdicts, cone calibration convergence, latency hysteresis,
 fallback chains, Elfa budget pacing and persistence, wallet spam handling, the secrets/wallet privacy guarantees, AI
 fallback with mid-answer continuation, and the HTTP API. CI runs both suites, a typecheck, lint and a production build.
 

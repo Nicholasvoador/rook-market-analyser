@@ -17,7 +17,7 @@ import httpx
 
 from . import db, predict, signals
 from .config import load_settings, local_tz, secret, user_name
-from .sources import crypto, elfa, sentiment, stocks
+from .sources import crypto, elfa, markets, sentiment, stocks
 
 SYSTEM_TMPL = """You are **Rook**, {who} personal market analyst inside Rook Market Analyser (crypto first, then stocks and macro). You run on the user's own Hermes models in a local app.
 
@@ -108,7 +108,10 @@ def detect_symbols(text, settings):
         if (s in stock_list or s + ".SA" in stock_list or m.group(0).startswith("$")) and s not in found \
                 and s not in known_c:
             found.append(s + ".SA" if s + ".SA" in stock_list else s)
-    return found[:5]
+    for s in markets.detect_aliases(text):  # gold, oil, S&P 500, Ibovespa, dólar, 10y...
+        if s not in found:
+            found.append(s)
+    return found[:6]
 
 
 async def build_context(user_text, focus=None, include_portfolio=None):
@@ -116,7 +119,8 @@ async def build_context(user_text, focus=None, include_portfolio=None):
     tz = local_tz(st)
     now = datetime.now(tz)
     syms = list(dict.fromkeys((focus or []) + detect_symbols(user_text, st)))
-    crypto_syms = [s for s in syms if "." not in s and not s.isdigit() and s not in st["watchlist"]["stocks"]]
+    crypto_syms = [s for s in syms if not markets.is_yahoo_symbol(s) and not s.isdigit()
+                   and s not in st["watchlist"]["stocks"]]
     stock_syms = [s for s in syms if s not in crypto_syms]
 
     glob, fng, macro, tick, dv, oc, agg_news, liq = await asyncio.gather(
@@ -137,6 +141,7 @@ async def build_context(user_text, focus=None, include_portfolio=None):
             L.append(f"- UST {r['date']}: 2Y {r['2y']}%, 10Y {r['10y']}%, 2s10s {r.get('spread_2s10s')}")
         if macro.get("cnn_fg"):
             L.append(f"- Stocks Fear&Greed (CNN) {macro['cnn_fg']['value']} ({macro['cnn_fg']['label']})")
+    L += await markets.context_lines()
     if oc:
         dvb = (oc.get("dvol") or {}).get("BTC")
         if dvb:
@@ -174,6 +179,7 @@ async def build_context(user_text, focus=None, include_portfolio=None):
             continue
         L.append(f"\n### {s} (crypto)")
         L.append(_sig_lines(sig))
+        L += _perf_line(await _safe(markets.row(s, "crypto")))
         cd = await _safe(crypto.coin_detail(s))
         if cd and cd.get("mcap"):
             L.append(f"- Fundamentals: mcap {_fmt(cd['mcap'])}, FDV {_fmt(cd.get('fdv'))}, circ/max "
@@ -200,11 +206,13 @@ async def build_context(user_text, focus=None, include_portfolio=None):
         if heads:
             L.append("- Headlines: " + " | ".join(f"[{h['label']}] {h['title'][:110]} ({h['source']})" for h in heads))
     for s in stock_syms:
+        kind = markets.kind_of(s)
         sig = await _safe(signals.stock_signal(s))
         if sig:
-            L.append(f"\n### {s} (stock)")
+            L.append(f"\n### {s} ({markets.label_of(s) or s}, {kind})")
             L.append(_sig_lines(sig))
-        f = await _safe(stocks.fundamentals(s))
+        L += _perf_line(await _safe(markets.row(s)))
+        f = await _safe(stocks.fundamentals(s)) if kind == "equity" else None
         if f:
             L.append(f"- Fundamentals [{f.get('source')}]: {f.get('name') or ''} {f.get('sector') or ''}; mcap {_fmt(f.get('mcap'))}, "
                      f"P/E {_fmt(f.get('pe'))}, fwd P/E {_fmt(f.get('fpe'))}, P/S {_fmt(f.get('ps'))}, rev growth "
@@ -242,6 +250,29 @@ async def build_context(user_text, focus=None, include_portfolio=None):
              + (f" (home currency BRL, USD/BRL {_fmt(fx)})." if home == "BRL" else "."))
     L.append("- " + predict.llm_track_record()["text"])
     return "\n".join(L), syms
+
+
+def _perf_line(r):
+    """One line of returns (USD, BRL, vs CDI), 52w range and volatility for an asset."""
+    if not r:
+        return []
+    ks = ("w1", "m1", "m3", "ytd", "y1")
+    names = {"w1": "1W", "m1": "1M", "m3": "3M", "ytd": "YTD", "y1": "1Y"}
+    if r.get("unit") == "yield":
+        return ["- Yield change: " + ", ".join(f"{names[k]} {r[k]:+.0f}bp" for k in ks if r.get(k) is not None)]
+    out = "- Returns: " + ", ".join(f"{names[k]} {r[k]:+.1f}%" for k in ks if r.get(k) is not None)
+    if r.get("brl") and r.get("ccy") == "USD":
+        out += " | in BRL: " + ", ".join(f"{names[k]} {v:+.1f}%" for k, v in r["brl"].items())
+    if r.get("xcdi"):
+        out += " | excess vs CDI: " + ", ".join(f"{names[k]} {v:+.1f}%" for k, v in r["xcdi"].items())
+    extra = []
+    if r.get("pos52") is not None:
+        extra.append(f"52w range position {r['pos52'] * 100:.0f}% ({_fmt(r.get('dd52'), pct=True)} from the 52w high)")
+    if r.get("vol30") is not None:
+        extra.append(f"30d vol {r['vol30']:.0f}% ann.")
+    if r.get("trend"):
+        extra.append(f"daily trend {r['trend']} (EMA50/200)")
+    return [out] + (["- " + "; ".join(extra)] if extra else [])
 
 
 def _elfa_lines():

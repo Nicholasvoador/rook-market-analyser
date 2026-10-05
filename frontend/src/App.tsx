@@ -12,13 +12,14 @@ import Ask from './pages/Ask'
 import Asset from './pages/Asset'
 import Dashboard from './pages/Dashboard'
 import Portfolio from './pages/Portfolio'
+import Markets from './pages/Markets'
 import Predictions from './pages/Predictions'
 import Settings from './pages/Settings'
 import Signals from './pages/Signals'
 
 const NAV: [string, string, typeof LayoutDashboard, string][] = [
   ['dashboard', 'Dashboard', LayoutDashboard, '1'],
-  ['asset', 'Markets', CandlestickChart, '2'],
+  ['markets', 'Markets', CandlestickChart, '2'],
   ['ask', 'Ask Rook', MessageSquare, '3'],
   ['signals', 'Signals', Radar, '4'],
   ['predictions', 'Predictions', Target, '5'],
@@ -160,7 +161,7 @@ export default function App() {
         saveSettings({ display: { ui_scale: s } })
       } else if (e.altKey && /^[1-8]$/.test(e.key)) {
         const n = NAV[+e.key - 1]
-        if (n) go(n[0] === 'asset' ? 'asset/crypto/BTC' : n[0])
+        if (n) go(n[0])
       }
     }
     window.addEventListener('keydown', key)
@@ -194,7 +195,7 @@ export default function App() {
           <span className="brand-name">Rook <span className="faint" style={{ fontWeight: 400 }}>Market Analyser</span></span>
         </div>
         {NAV.map(([p, l, Icon, k]) => (
-          <a key={p} className={`nav ${page === p ? 'on' : ''}`} aria-current={page === p ? 'page' : undefined} href={p === 'asset' ? (page === 'asset' ? location.hash : '#/asset/crypto/BTC') : `#/${p}`}>
+          <a key={p} className={`nav ${page === p || (p === 'markets' && page === 'asset') ? 'on' : ''}`} aria-current={page === p ? 'page' : undefined} href={`#/${p}`}>
             <Icon aria-hidden="true" />
             <span>{l}</span>
             <span className="k">⌥{k}</span>
@@ -214,6 +215,7 @@ export default function App() {
       <main className="main" id="main" tabIndex={-1}>
         {page === 'dashboard' && <Dashboard />}
         {page === 'asset' && <Asset kind={(route.parts[1] as 'crypto' | 'stock' | 'dex') || 'crypto'} sym={decodeURIComponent(route.parts[2] || 'BTC')} />}
+        {page === 'markets' && <Markets tab={route.parts[1]} />}
         {page === 'ask' && <Ask chatId={route.parts[1]} q={route.query.get('q')} />}
         {page === 'signals' && <Signals />}
         {page === 'predictions' && <Predictions />}

@@ -32,5 +32,13 @@ export const GLOSSARY: Record<string, [string, string]> = {
   corr: ['Correlation', '+1 = move together, 0 = unrelated, -1 = opposite. Highly correlated holdings do not diversify.'],
   early: ['Early (lead-time)', 'Elfa\'s lead-time play: a contract trending on Telegram but not yet on X. Telegram tends to lead. Extremely high risk.'],
   verified: ['Verified token', 'On Jupiter\'s verified list. Unverified tokens are mostly airdropped spam or copies and are excluded from totals.'],
+  cdi: ['CDI', 'Brazil\'s interbank rate, which tracks the Selic. Most fixed income and savings in BRL pay a % of CDI, so it is the hurdle any BRL investment has to beat.'],
+  xcdi: ['Return vs CDI', 'Return in BRL minus what CDI paid over the same window (as an excess return). Negative = you would have done better in a CDI fund, without the risk.'],
+  selic: ['Selic', 'Brazil\'s policy interest rate, set by the central bank (Copom) roughly every 45 days.'],
+  ipca: ['IPCA', 'Brazil\'s official consumer inflation index (IBGE). The 12-month figure compounds the last 12 monthly readings.'],
+  real_rate: ['Real interest rate', 'Interest rate minus inflation: what savings actually earn in purchasing power. Brazil\'s is among the highest in the world.'],
+  pos52: ['52-week range', 'Where the price sits between its lowest and highest level of the past year. Left = near the yearly low, right = near the high.'],
+  trend: ['Trend (daily)', 'Up = price above a rising 50-day average that is above the 200-day average. Down = the opposite. Mixed = they disagree.'],
+  bp: ['Basis point (bp)', 'One hundredth of a percentage point. A yield moving from 4.00% to 4.25% is +25 bp.'],
   latency: ['Latency', 'Time from the exchange event to your screen. The app measures every source and uses the fastest healthy one first.'],
 }

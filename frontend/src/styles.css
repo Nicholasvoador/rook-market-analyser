@@ -1570,3 +1570,133 @@ select.input {
   gap: var(--gap);
   align-items: start;
 }
+
+/* Markets page */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.25rem;
+}
+.tabs .tab {
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--r) var(--r) 0 0;
+  color: var(--muted);
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-bottom: none;
+  margin-bottom: -1px;
+}
+.tabs .tab:hover {
+  color: var(--ink);
+  background: var(--panel-2);
+}
+.tabs .tab.on {
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.t tr.grp th {
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  padding-top: 0.5rem;
+}
+.th-sort {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.th-sort:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+.mkt-name {
+  color: inherit;
+  white-space: nowrap;
+}
+.mkt-name b {
+  font-weight: 500;
+}
+.muted-delta {
+  opacity: 0.55;
+}
+.range52 {
+  position: relative;
+  display: inline-block;
+  width: 5.5rem;
+  height: 0.375rem;
+  border-radius: 0.25rem;
+  background: linear-gradient(90deg, var(--down-soft), var(--panel-2) 50%, var(--up-soft));
+  border: 1px solid var(--line-2);
+  vertical-align: middle;
+}
+.range52 i {
+  position: absolute;
+  top: -0.1875rem;
+  width: 0.375rem;
+  height: 0.625rem;
+  border-radius: 0.125rem;
+  background: var(--ink);
+}
+.statgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  gap: 0.75rem;
+}
+.statgrid .stat .v {
+  font-size: 1.375rem;
+  font-weight: 500;
+}
+.legend-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+.legend-btns .lg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.1875rem 0.5rem;
+  border-radius: 1rem;
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.legend-btns .lg i {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+}
+.legend-btns .lg.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.t.heat td {
+  text-align: center;
+  font-size: 0.8125rem;
+  padding: 0.3125rem 0.25rem;
+}
+.t.heat th {
+  font-size: 0.75rem;
+}
+.crumbs a {
+  color: var(--muted);
+}
+.crumbs a:hover {
+  color: var(--accent);
+}

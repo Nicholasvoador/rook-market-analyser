@@ -419,7 +419,7 @@ export default function Settings() {
             <div className="col">
               <div className="field"><span>Crypto (base symbols, streamed from the fastest venue that lists them)</span>
                 <Chips label="Add crypto symbol" list={w.crypto} placeholder="+ BTC" onChange={(l) => saveSettings({ watchlist: { ...w, crypto: l } })} /></div>
-              <div className="field"><span>Stocks / ETFs (Yahoo symbols: B3 uses .SA, e.g. PETR4.SA)</span>
+              <div className="field"><span>Stocks, ETFs, commodities, indices (Yahoo symbols: B3 uses .SA, e.g. PETR4.SA; gold GC=F; S&amp;P 500 ^GSPC)</span>
                 <Chips label="Add stock symbol" list={w.stocks} placeholder="+ NVDA" onChange={(l) => saveSettings({ watchlist: { ...w, stocks: l } })} /></div>
               <div className="field"><span>On-chain tokens (add from a wallet or a token page)</span>
                 <div className="row wrap">

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { Bell, ExternalLink, MessageSquare, Plus, Sparkles } from 'lucide-react'
 import Chart, { type ChartInfo, type Cone, type Ind, type PriceLine } from '../components/Chart'
 import OrderBook from '../components/OrderBook'
+import { PerfCard } from '../components/MarketBits'
 import { CBar, Delta, EdgeBadge, Err, Flash, Levels, Panel, Readout, ScoreChip, Seg, SetupList, Skel, Spark, Term } from '../components/ui'
+import { KIND_LABEL, TAB_FOR_KIND } from '../lib/markets'
 import { api, post, useApi } from '../lib/api'
 import { ago, big, isNum, num, pct, price, tone, until } from '../lib/fmt'
 import { go, loadSettings, useLive, useSettings } from '../lib/store'
@@ -376,6 +378,9 @@ function XPanel({ sym, name }: { sym: string; name?: string }) {
   )
 }
 
+// best guess before /api/markets/row answers (avoids flashing equity-only panels on futures/FX/indices)
+const sq0Type = (s: string) => (/=F$/.test(s) ? 'commodity' : /=X$|^DX-Y/.test(s) ? 'fx' : s.startsWith('^') ? 'index' : 'equity')
+
 export default function Asset({ kind, sym }: { kind: Kind; sym: string }) {
   const S = kind === 'crypto' ? sym.toUpperCase() : sym
   const defIv = kind === 'stock' ? '1d' : '1h'
@@ -389,6 +394,10 @@ export default function Asset({ kind, sym }: { kind: Kind; sym: string }) {
   const { data: sig, error: sigErr } = useApi<any>(`/api/signals/one?sym=${encodeURIComponent(S)}&kind=${kind}`, 120000)
   const { data: q } = useApi<any[]>(kind === 'stock' ? `/api/stocks/quotes?syms=${encodeURIComponent(S)}` : null, 30000)
   const { data: tok } = useApi<any>(kind === 'dex' ? `/api/dex/token?mint=${encodeURIComponent(S)}` : null, 60000)
+  const { data: mrow } = useApi<any>(kind !== 'dex' ? `/api/markets/row?sym=${encodeURIComponent(S)}&kind=${kind}` : null, 120000)
+  const mkind: string = kind === 'crypto' ? 'crypto' : kind === 'dex' ? 'dex' : mrow?.kind || (sq0Type(S))
+  const isEquity = kind === 'stock' && mkind === 'equity'
+  const named = kind === 'stock' && !!mrow?.label && !['equity', 'etf'].includes(mkind)
   const fc = useApi<any[]>('/api/predictions/current', 300000).data
   useEffect(() => setInfo({}), [S, iv])
   useEffect(() => setIv(defIv), [kind, defIv])
@@ -396,7 +405,7 @@ export default function Asset({ kind, sym }: { kind: Kind; sym: string }) {
   const sq = q?.[0]
   const last = kind === 'stock' ? sq?.price ?? info.last : tick?.price ?? info.last
   const chg = kind === 'stock' ? sq?.chg : tick?.chg24 ?? (kind === 'dex' ? tok?.chg24 : undefined)
-  const title = kind === 'dex' ? tok?.symbol || sig?.sym || `${S.slice(0, 6)}…` : S.replace('.SA', '')
+  const title = kind === 'dex' ? tok?.symbol || sig?.sym || `${S.slice(0, 6)}…` : named ? mrow.label : S.replace('.SA', '')
   const wlKey = kind === 'crypto' ? 'crypto' : kind === 'dex' ? 'dex' : 'stocks'
   const inWl = kind === 'dex' ? (settings?.watchlist?.dex || []).some((d: any) => d.mint === S) : (settings?.watchlist?.[wlKey] || []).includes(S)
   const preds = (fc || []).filter((p) => p.sym === S)
@@ -419,11 +428,16 @@ export default function Asset({ kind, sym }: { kind: Kind; sym: string }) {
     <div className="col">
       <div className="page-head">
         <div>
+          <nav aria-label="Breadcrumb" className="tiny muted crumbs">
+            <a href={`#/markets/${kind === 'dex' ? 'crypto' : TAB_FOR_KIND[mkind] || 'stocks'}`}>Markets</a>
+            <span aria-hidden="true"> › </span>
+            <span>{kind === 'dex' ? 'On-chain' : mrow?.group || KIND_LABEL[mkind] || kind}</span>
+          </nav>
           <div className="row wrap">
             {kind === 'dex' && tok?.icon && <img className="tok-icon" src={tok.icon} alt="" />}
             <h1 className="h1" style={{ margin: 0 }}>{title}</h1>
-            {(sq?.name || tok?.name) && <span className="muted">{sq?.name || tok?.name}</span>}
-            <span className="chip">{kind === 'dex' ? 'on-chain' : kind}</span>
+            {named ? <span className="muted">{S}</span> : (sq?.name || tok?.name) && <span className="muted">{sq?.name || tok?.name}</span>}
+            <span className="chip">{kind === 'dex' ? 'on-chain' : KIND_LABEL[mkind] || kind}</span>
             {sig && <ScoreChip score={sig.score} label={sig.label} />}
           </div>
           <div className="row wrap" style={{ marginTop: '0.25rem' }}>
@@ -501,7 +515,8 @@ export default function Asset({ kind, sym }: { kind: Kind; sym: string }) {
         {kind === 'dex' && <DexFund t={tok ? { ...tok, mint: S } : null} />}
         {kind !== 'stock' && <XPanel sym={xSym} name={kind === 'dex' ? tok?.name : undefined} />}
         {kind === 'crypto' && <CryptoFund sym={S} />}
-        {kind === 'stock' && <StockFund sym={S} last={last} />}
+        {kind !== 'dex' && <PerfCard r={mrow} />}
+        {isEquity && <StockFund sym={S} last={last} />}
         {kind === 'crypto' && (
           <Panel title="Order book & trades" sub="direct exchange stream" flush>
             <OrderBook sym={S} />

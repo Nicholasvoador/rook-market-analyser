@@ -64,12 +64,26 @@ class Router:
         return httpx.Response(404, json={"error": f"unrouted {request.method} {request.url}"})
 
 
+def _mock_clients(handler):
+    """Route the shared client AND Yahoo's own cookie/crumb session through a mock transport."""
+    from rookery.sources import stocks
+    net._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    stocks.YH.c = httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True)
+    stocks.YH.crumb, stocks.YH.crumb_ts, stocks.YH.lock = None, 0, asyncio.Lock()
+
+
+def _unmock():
+    from rookery.sources import stocks
+    net._client = None
+    stocks.YH.c, stocks.YH.crumb = None, None
+
+
 @pytest.fixture
 def router():
     r = Router()
-    net._client = httpx.AsyncClient(transport=httpx.MockTransport(r))
+    _mock_clients(r)
     yield r
-    net._client = None
+    _unmock()
 
 
 @pytest.fixture
@@ -77,6 +91,18 @@ def no_network(monkeypatch):
     """Fail loudly if anything tries a real request."""
     def boom(request):
         raise AssertionError(f"unexpected network call: {request.url}")
-    net._client = httpx.AsyncClient(transport=httpx.MockTransport(boom))
+    _mock_clients(boom)
     yield
-    net._client = None
+    _unmock()
+
+
+@pytest.fixture(autouse=True)
+def _never_real_yahoo():
+    """Even tests without a router must not reach Yahoo through its private session."""
+    from rookery.sources import stocks
+    if stocks.YH.c is None:
+        def boom(request):
+            raise httpx.ConnectError(f"network disabled in tests: {request.url}")
+        stocks.YH.c = httpx.AsyncClient(transport=httpx.MockTransport(boom))
+        stocks.YH.crumb = None
+    yield
