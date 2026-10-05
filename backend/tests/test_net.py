@@ -69,6 +69,35 @@ def test_chain_falls_back_and_records_health():
     assert calls == []
 
 
+def test_not_applicable_is_not_a_failure():
+    calls = []
+
+    async def na():
+        calls.append("na")
+        raise net.NotApplicable("no B3 symbols")
+
+    async def good():
+        return [1]
+    assert run(net.chain("q:1", [("brapi", na), ("yahoo", good)], adaptive=False)) == ([1], "yahoo")
+    snap = {s["source"] for s in net.HEALTH.snapshot()}
+    assert "brapi" not in snap  # no failure recorded
+    run(net.chain("q:1", [("brapi", na), ("yahoo", good)], adaptive=False))
+    assert calls == ["na", "na"]  # and no cooldown: it is asked again next time
+
+
+def test_cooldown_is_scoped_to_the_chain():
+    async def bad():
+        raise net.SourceError("empty")
+
+    async def good():
+        return [1]
+    run(net.chain("klines:HYPE", [("binance", bad), ("bybit", good)], adaptive=False))
+    # binance failed for HYPE, but must still be tried first for BTC
+    assert run(net.chain("klines:BTC", [("binance", good), ("bybit", good)], adaptive=False))[1] == "binance"
+    # ...while for HYPE it is skipped during the cooldown
+    assert run(net.chain("klines:HYPE", [("binance", bad), ("bybit", good)], adaptive=False))[1] == "bybit"
+
+
 def test_chain_raises_when_all_fail():
     async def bad():
         raise net.SourceError("nope")

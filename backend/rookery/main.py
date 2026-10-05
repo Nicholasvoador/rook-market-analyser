@@ -10,7 +10,7 @@ from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDis
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ai, alerts, db, net, portfolio, predict, setups, signals, wallets
+from . import __version__, ai, alerts, db, net, portfolio, predict, setups, signals, wallets
 from .config import APP_NAME, FRONTEND_DIST, load_settings, save_settings, secret, secrets_status, set_secrets
 from .sources import crypto, elfa, markets, sentiment, solana, stocks
 
@@ -183,9 +183,10 @@ async def loop_markets():
             await markets.cross()
             await markets.brazil()
             _task_ok("markets")
-        except Exception as e:  # noqa: BLE001
+            await asyncio.sleep(600)
+        except Exception as e:  # noqa: BLE001  e.g. network not up yet right after login: retry soon, not in 10 min
             _task_err("markets", e)
-        await asyncio.sleep(600)
+            await asyncio.sleep(60)
 
 
 async def loop_elfa():
@@ -240,7 +241,7 @@ async def lifespan(app):
     await net.close()
 
 
-app = FastAPI(title=APP_NAME, lifespan=lifespan, default_response_class=ORJSON)
+app = FastAPI(title=APP_NAME, version=__version__, lifespan=lifespan, default_response_class=ORJSON)
 
 
 def _err(e):
@@ -250,7 +251,7 @@ def _err(e):
 # ------------------------------------------------------------------ status / settings
 @app.get("/api/status")
 async def status():
-    return {"app": APP_NAME, "uptime_s": time.time() - STATE["started"], "tasks": STATE["tasks"],
+    return {"app": APP_NAME, "version": __version__, "uptime_s": time.time() - STATE["started"], "tasks": STATE["tasks"],
             "hermes": await ai.health(), "ws_clients": len(HUB.clients), "liq_connected": crypto.LIQS.connected,
             "elfa": {"configured": bool(elfa.key()), "budget": elfa.Budget.status()}}
 

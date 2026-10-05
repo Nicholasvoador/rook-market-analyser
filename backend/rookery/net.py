@@ -170,8 +170,14 @@ def hysteresis_rank(names, cost, tol=1.25):
     return out
 
 
-# Sources that recently failed get skipped for a cooldown so the chain answers fast.
-_cooldown: dict[str, float] = {}
+# Sources that recently failed get skipped for a cooldown so the chain answers fast. Keyed by (chain, source): a source
+# that can't serve klines:HYPE must not be skipped for klines:BTC, and a quote batch failing doesn't sideline it elsewhere.
+_cooldown: dict[tuple[str, str], float] = {}
+
+
+class NotApplicable(SourceError):
+    """This source can't serve this request (wrong market, interval, symbol set). Not a failure: no health hit,
+    no cooldown, the chain just moves on."""
 
 
 async def chain(name, attempts, *, cooldown_s=60, adaptive=True):
@@ -181,7 +187,7 @@ async def chain(name, attempts, *, cooldown_s=60, adaptive=True):
     if adaptive:
         rank = {n: i for i, n in enumerate(order([a[0] for a in attempts], family(name)))}
         attempts = sorted(attempts, key=lambda a: rank[a[0]])
-    ordered = [a for a in attempts if _cooldown.get(a[0], 0) <= now] or attempts
+    ordered = [a for a in attempts if _cooldown.get((name, a[0]), 0) <= now] or attempts
     for src, fn in ordered:
         t0 = time.perf_counter()
         try:
@@ -189,11 +195,13 @@ async def chain(name, attempts, *, cooldown_s=60, adaptive=True):
             if data is None or (hasattr(data, "__len__") and len(data) == 0):
                 raise SourceError("empty")
             HEALTH.ok(name, src, (time.perf_counter() - t0) * 1000)
-            _cooldown.pop(src, None)
+            _cooldown.pop((name, src), None)
             return data, src
+        except NotApplicable as e:
+            errors.append(f"{src}: n/a ({e})")
         except Exception as e:  # noqa: BLE001
             HEALTH.fail(name, src, e)
-            _cooldown[src] = time.time() + cooldown_s
+            _cooldown[(name, src)] = time.time() + cooldown_s
             errors.append(f"{src}: {e}")
     raise SourceError(f"{name}: all sources failed -> " + " | ".join(errors))
 

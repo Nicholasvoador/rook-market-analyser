@@ -490,8 +490,14 @@ export function bookStream(sym: string, onBook: (b: Book) => void, onTrade: (t: 
               bb.bids.clear()
               bb.asks.clear()
             }
-            for (const [p, q] of m.data.b) +q === 0 ? bb.bids.delete(+p) : bb.bids.set(+p, +q)
-            for (const [p, q] of m.data.a) +q === 0 ? bb.asks.delete(+p) : bb.asks.set(+p, +q)
+            for (const [p, q] of m.data.b) {
+              if (+q === 0) bb.bids.delete(+p)
+              else bb.bids.set(+p, +q)
+            }
+            for (const [p, q] of m.data.a) {
+              if (+q === 0) bb.asks.delete(+p)
+              else bb.asks.set(+p, +q)
+            }
             onBook({
               bids: [...bb.bids.entries()].sort((a, b) => b[0] - a[0]).slice(0, 20),
               asks: [...bb.asks.entries()].sort((a, b) => a[0] - b[0]).slice(0, 20),

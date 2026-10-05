@@ -113,7 +113,7 @@ async def quotes(syms):
     async def brapi():
         b3 = [s[:-3] for s in syms if s.endswith(".SA")]
         if not b3:
-            raise net.SourceError("no B3 symbols")
+            raise net.NotApplicable("no B3 symbols")
         tok = secret("BRAPI_TOKEN")
         out = []
         for s in b3:
@@ -166,7 +166,7 @@ async def klines(sym, interval="1d"):
 
     async def stooq():
         if interval not in ("1d", "1w"):
-            raise net.SourceError("stooq daily only")
+            raise net.NotApplicable("stooq daily only")
         s = _stooq_sym(sym)
         txt = await get_text(f"https://stooq.com/q/d/l/?s={s}&i={'d' if interval == '1d' else 'w'}", ua=UA_BARE)
         if not txt.startswith("Date"):

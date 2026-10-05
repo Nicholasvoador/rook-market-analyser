@@ -194,7 +194,7 @@ async def _kl_okx(pair, iv, limit):
 async def _kl_coinbase(base, iv, limit):
     g = _CB_IV.get(iv)
     if not g:
-        raise net.SourceError("interval unsupported")
+        raise net.NotApplicable("interval unsupported")
     d = await get_json(f"{COINBASE}/products/{base}-USD/candles", params={"granularity": g})
     rows = [_row(k[0], k[3], k[2], k[1], k[4], k[5] * k[4]) for k in reversed(d)]
     return rows[-limit:]

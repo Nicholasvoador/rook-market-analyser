@@ -396,6 +396,7 @@ function Chips({ list, onChange, placeholder, label }: { list: string[]; onChang
 
 export default function Settings() {
   const { settings: s } = useSettings()
+  const ver = useApi<any>('/api/status').data?.version
   if (!s) return <Skel n={10} />
   const w = s.watchlist
   return (
@@ -464,7 +465,7 @@ export default function Settings() {
         <div id="set-about">
           <Panel title="About">
             <div className="kv" style={{ maxWidth: '45rem' }}>
-              <span>App</span><span>Rook Market Analyser (package: rookery)</span>
+              <span>App</span><span>Rook Market Analyser {ver ? `v${ver}` : ''} (package: rookery)</span>
               <span>Data & models</span><span>~/.local/share/rookery</span>
               <span>Settings & keys</span><span>~/.config/rookery</span>
               <span>Service</span><span>systemctl --user status rookery</span>
