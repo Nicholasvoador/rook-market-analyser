@@ -126,6 +126,12 @@ export function rankBy(cands: string[], lat: Record<string, VenueLat | undefined
   return out
 }
 
+function chunk<T>(a: T[], n: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < a.length; i += n) out.push(a.slice(i, i + n))
+  return out
+}
+
 const BINANCE_BASE = { binance: 'wss://stream.binance.com:9443/stream', 'binance.vision': 'wss://data-stream.binance.vision/stream' }
 function binanceUrls() {
   return rankVenues(['binance', 'binance.vision']).map((v) => BINANCE_BASE[v as keyof typeof BINANCE_BASE])
@@ -203,20 +209,49 @@ class Live {
   okArgs = new Set<string>()
   status: Record<Venue, boolean> = { binance: false, bybit: false, okx: false }
   lastMsg = 0
+  retries = new Map<string, number>()
+  // Subscriptions are coalesced: Binance closes a connection that receives more than 5 control messages per second
+  // (code 1008 "Too many requests", after ~6s of silence), which a burst of one SUBSCRIBE per symbol triggers.
+  q: Record<Venue, Set<string>> = { binance: new Set(), bybit: new Set(), okx: new Set() }
+  qTimer = 0
+
+  queue(venue: Venue, item: string) {
+    this.q[venue].add(item)
+    if (!this.qTimer) this.qTimer = window.setTimeout(() => this.flush(), 250)
+  }
+
+  flush() {
+    this.qTimer = 0
+    // anything queued while a socket is still connecting is already in its set and goes out in the onOpen batch
+    const b = [...this.q.binance]
+    if (b.length && this.bn?.open) this.bn.send({ method: 'SUBSCRIBE', params: b, id: Date.now() % 1e6 })
+    for (const args of chunk([...this.q.bybit], 10)) if (this.bb?.open) this.bb.send({ op: 'subscribe', args })
+    const o = [...this.q.okx]
+    if (o.length && this.ok?.open) this.ok.send({ op: 'subscribe', args: o.map((i) => ({ channel: 'tickers', instId: i })) })
+    for (const k of Object.keys(this.q) as Venue[]) this.q[k].clear()
+  }
 
   async resolve(sym: string) {
     if (this.venue.has(sym) || sym.length > 15) return // on-chain mints are streamed by dexStream, not CEX sockets
     if (!this.pending.has(sym)) {
       this.pending.set(
         sym,
-        api(`/api/crypto/resolve?sym=${sym}`)
+        api(`/api/crypto/resolve?sym=${encodeURIComponent(sym)}`)
           .then((r) => {
             const cands: { venue: Venue; pair: string }[] = r.venues?.length ? r.venues : [{ venue: r.venue, pair: r.pair }]
             const best = rankVenues(cands.map((c) => c.venue))[0]
             const pick = cands.find((c) => c.venue === best) || cands[0]
             this.venue.set(sym, { venue: pick.venue, pair: pick.pair })
+            this.retries.delete(sym)
           })
-          .catch(() => undefined),
+          .catch(() => {
+            // Never cache a failure (backend restarting, cold start, network blip): forget it and retry with backoff
+            // while something is still subscribed, otherwise the symbol would stay dead until a page reload.
+            this.pending.delete(sym)
+            const n = (this.retries.get(sym) || 0) + 1
+            this.retries.set(sym, n)
+            if (n <= 8) window.setTimeout(() => this.subs.get(sym)?.size && this.watch(sym), Math.min(30000, 1000 * 2 ** n))
+          }),
       )
     }
     await this.pending.get(sym)
@@ -254,7 +289,7 @@ class Live {
       ['wss://stream.bybit.com/v5/public/spot'],
       (ws) => {
         this.status.bybit = true
-        if (this.bbTopics.size) ws.send(JSON.stringify({ op: 'subscribe', args: [...this.bbTopics] }))
+        for (const args of chunk([...this.bbTopics], 10)) ws.send(JSON.stringify({ op: 'subscribe', args })) // Bybit: max 10 per request
       },
       (m) => {
         if (!m.topic?.startsWith('tickers.') || !m.data) return
@@ -296,20 +331,20 @@ class Live {
       if (!this.bnStreams.has(s)) {
         this.bnStreams.add(s)
         this.ensureBinance()
-        this.bn!.send({ method: 'SUBSCRIBE', params: [s], id: Date.now() % 1e6 })
+        this.queue('binance', s)
       }
     } else if (v.venue === 'bybit') {
       const t = `tickers.${v.pair}`
       if (!this.bbTopics.has(t)) {
         this.bbTopics.add(t)
         this.ensureBybit()
-        this.bb!.send({ op: 'subscribe', args: [t] })
+        this.queue('bybit', t)
       }
     } else {
       if (!this.okArgs.has(v.pair)) {
         this.okArgs.add(v.pair)
         this.ensureOkx()
-        this.ok!.send({ op: 'subscribe', args: [{ channel: 'tickers', instId: v.pair }] })
+        this.queue('okx', v.pair)
       }
     }
   }
@@ -501,3 +536,6 @@ export function dexStream(mint: string, interval: string, last: Bar | undefined,
   tick()
   return () => clearInterval(id)
 }
+
+// debugging handle for the local app (inspect live feed state from devtools: __rook.live)
+;(window as unknown as { __rook: unknown }).__rook = { live, venueLat: () => venueLat }
